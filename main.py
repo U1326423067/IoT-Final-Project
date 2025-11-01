@@ -38,30 +38,46 @@ def get_distance(timeout_us=30000):
     TRIGGER_PIN.value(0)
 
     start_wait = utime.ticks_us()
+    pulse_start = None
+    pulse_end = None
+
+    # Echo가 HIGH 될 때까지 대기
     while ECHO_PIN.value() == 0:
         if utime.ticks_diff(utime.ticks_us(), start_wait) > timeout_us:
-            return -1
+            return -1  # timeout
         pulse_start = utime.ticks_us()
 
+    # Echo가 LOW 될 때까지 대기
     while ECHO_PIN.value() == 1:
         if utime.ticks_diff(utime.ticks_us(), start_wait) > timeout_us:
-            return -1
+            return -1  # timeout
         pulse_end = utime.ticks_us()
 
+    if pulse_start is None or pulse_end is None:
+        return -1  # 안전 장치
+
     pulse_duration = utime.ticks_diff(pulse_end, pulse_start)
-    distance = pulse_duration * 0.0343 / 2  # cm 단위
+    distance = pulse_duration * 0.0343 / 2  # cm
+
+    # 최소 거리 제한 (2cm 미만이면 2cm로 처리)
+    if distance < 2:
+        distance = 2
+
     return distance
+
+
 
 # === 메인 루프 ===
 while True:
     distance = get_distance()
+    
     if distance == -1:
-        print("Distance measurement failed (timeout)")
+        print("Distance: less than 2cm")
     else:
         print("Distance:", round(distance,2), "cm")
 
     # 30cm 이하이면 타이머 시작
-    if distance != -1 and distance <= 30 and not timer_running:
+    if distance <= 30 and not timer_running:
         timer_running = True
         timer_start = utime.ticks_ms()
         print("Timer started")
@@ -72,7 +88,7 @@ while True:
         print("Timer running:", round(elapsed_ms/1000,2), "seconds")
 
         # 거리 > 30cm이면 타이머 종료 및 Webhook 전송
-        if distance == -1 or distance > 30:
+        if distance > 30:
             timer_running = False
             elapsed_sec = elapsed_ms / 1000
             elapsed_hour = elapsed_sec / 3600
@@ -91,3 +107,4 @@ while True:
                 print("Failed to send data:", e)
 
     utime.sleep(1)
+
